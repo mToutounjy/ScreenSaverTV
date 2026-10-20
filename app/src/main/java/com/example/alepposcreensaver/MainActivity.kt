@@ -45,7 +45,7 @@ class MainActivity : Activity() {
     private lateinit var weatherContent: LinearLayout
     private lateinit var weatherStatus: TextView
     private lateinit var wisdomText: TextView
-    private lateinit var clockSection: View
+    private lateinit var clockSection: LinearLayout
     private lateinit var dateSection: View
     private lateinit var prayerSection: View
     private lateinit var weatherSection: View
