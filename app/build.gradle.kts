@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.alepposcreensaver"
         minSdk = 26
         targetSdk = 28
-        versionCode = 6
-        versionName = "1.5"
+        versionCode = 10
+        versionName = "1.9"
     }
 
     compileOptions {

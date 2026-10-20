@@ -94,49 +94,55 @@
     .topbar {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      gap: 10px;
       min-width: 0;
     }
 
-    .brand {
+    .azkar-player {
       display: flex;
       align-items: center;
-      gap: 13px;
-      color: var(--mint);
-      font-size: clamp(20px, 1.7vw, 30px);
-      font-weight: 700;
-      letter-spacing: .02em;
-    }
-
-    .brand-mark {
-      display: grid;
-      width: 37px;
-      height: 37px;
-      place-items: center;
-      border: 1px solid rgb(164 224 206 / 40%);
-      border-radius: 13px;
-      background: rgb(164 224 206 / 10%);
-      font-size: 22px;
-    }
-
-    .top-actions {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .local-time, .settings-button {
+      min-width: 0;
+      height: 54px;
+      padding: 4px 10px;
+      flex: 1;
+      gap: 8px;
       border: 1px solid var(--line);
+      border-radius: 18px;
       background: rgb(9 23 32 / 56%);
       color: var(--ink);
       backdrop-filter: blur(12px);
     }
 
-    .local-time {
-      padding: 9px 16px;
-      border-radius: 999px;
+    .azkar-title {
+      min-width: 88px;
+      color: var(--mint);
+      font-size: clamp(12px, 1vw, 15px);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .azkar-control {
+      flex: none;
+      width: 38px;
+      height: 40px;
+      border: 0;
+      border-radius: 12px;
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 19px;
+    }
+
+    .azkar-control:hover { background: rgb(164 224 206 / 17%); }
+    .azkar-seek { min-width: 40px; flex: 1; accent-color: var(--mint); }
+
+    .azkar-time {
+      min-width: 78px;
       color: var(--muted);
-      font-size: clamp(13px, 1vw, 17px);
+      font-size: clamp(10px, .8vw, 12px);
+      text-align: center;
+      white-space: nowrap;
+      direction: ltr;
     }
 
     .settings-button {
@@ -144,6 +150,11 @@
       width: 43px;
       height: 43px;
       place-items: center;
+      flex: none;
+      border: 1px solid var(--line);
+      background: rgb(9 23 32 / 56%);
+      color: var(--ink);
+      backdrop-filter: blur(12px);
       border-radius: 50%;
       cursor: pointer;
       font-size: 21px;
@@ -476,11 +487,15 @@
 
     <div class="dashboard">
       <header class="topbar">
-        <div class="brand"><span class="brand-mark" aria-hidden="true">◈</span><span>مواقيت حلب</span></div>
-        <div class="top-actions">
-          <span class="local-time" id="datePill"></span>
-          <button class="settings-button" id="openSettings" type="button" aria-label="فتح إعدادات المعاينة" title="إعدادات المعاينة">⚙</button>
+        <div class="azkar-player" role="group" aria-label="مشغل أذكار الصباح">
+          <span class="azkar-title">أذكار الصباح</span>
+          <button class="azkar-control" id="azkarPlay" type="button" aria-label="تشغيل الأذكار">▶</button>
+          <button class="azkar-control" id="azkarStop" type="button" aria-label="إيقاف الأذكار">■</button>
+          <input class="azkar-seek" id="azkarSeek" type="range" min="0" max="0" value="0" aria-label="موضع التشغيل">
+          <span class="azkar-time" id="azkarTime">00:00 / 00:00</span>
+          <audio id="azkarAudio" src="app/src/main/res/raw/azkar.mp3" preload="metadata" hidden></audio>
         </div>
+        <button class="settings-button" id="openSettings" type="button" aria-label="فتح إعدادات المعاينة" title="إعدادات المعاينة">⚙</button>
       </header>
 
       <section class="main-row" aria-label="الساعة ومواقيت الصلاة">
@@ -534,8 +549,8 @@
       <footer class="wisdom" id="wisdomRegion">
         <span class="wisdom-mark" aria-hidden="true">“</span>
         <div class="wisdom-copy">
-          <div class="wisdom-label">حكمة اليوم</div>
-          <div class="wisdom-text" id="wisdomText">الخطوة الصغيرة كل يوم تصنع مسافة كبيرة.</div>
+          <div class="wisdom-label">حديث اليوم · صحيح البخاري 6013</div>
+          <div class="wisdom-text" id="wisdomText">من لا يرحم لا يرحم.</div>
         </div>
       </footer>
     </div>
@@ -549,7 +564,7 @@
         <label class="settings-row">إظهار الساعة والتاريخ<input type="checkbox" data-region="clockRegion" checked></label>
         <label class="settings-row">إظهار مواقيت الصلاة<input type="checkbox" data-region="prayerRegion" checked></label>
         <label class="settings-row">إظهار الطقس<input type="checkbox" data-region="weatherRegion" checked></label>
-        <label class="settings-row">إظهار حكمة اليوم<input type="checkbox" data-region="wisdomRegion" checked></label>
+        <label class="settings-row">إظهار حديث اليوم<input type="checkbox" data-region="wisdomRegion" checked></label>
         <label class="settings-row" for="wallpaperPicker">
           <span>اختيار صورة خلفية</span>
           <input id="wallpaperPicker" type="file" accept="image/*">
@@ -566,7 +581,62 @@
       const closeButton = document.getElementById("closeSettings");
       const image = document.getElementById("wallpaperImage");
       const blurLayer = document.getElementById("wallpaperBlur");
+      const azkarAudio = document.getElementById("azkarAudio");
+      const azkarPlay = document.getElementById("azkarPlay");
+      const azkarSeek = document.getElementById("azkarSeek");
+      const azkarTime = document.getElementById("azkarTime");
       let currentImageUrl = null;
+
+      const formatTime = (seconds) => {
+        if (!Number.isFinite(seconds)) return "00:00";
+        const value = Math.floor(seconds);
+        return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+      };
+
+      const updateAzkarTime = () => {
+        azkarTime.textContent = `${formatTime(azkarAudio.currentTime)} / ${formatTime(azkarAudio.duration)}`;
+      };
+
+      azkarPlay.addEventListener("click", async () => {
+        if (azkarAudio.paused) {
+          try {
+            await azkarAudio.play();
+          } catch (error) {
+            console.error("Could not play the bundled azkar audio.", error);
+          }
+        } else {
+          azkarAudio.pause();
+        }
+      });
+      document.getElementById("azkarStop").addEventListener("click", () => {
+        azkarAudio.pause();
+        azkarAudio.currentTime = 0;
+      });
+      azkarAudio.addEventListener("play", () => {
+        azkarPlay.textContent = "Ⅱ";
+        azkarPlay.setAttribute("aria-label", "إيقاف مؤقت للأذكار");
+      });
+      azkarAudio.addEventListener("pause", () => {
+        azkarPlay.textContent = "▶";
+        azkarPlay.setAttribute("aria-label", "تشغيل الأذكار");
+      });
+      azkarAudio.addEventListener("loadedmetadata", () => {
+        azkarSeek.max = String(Math.floor(azkarAudio.duration));
+        updateAzkarTime();
+      });
+      azkarAudio.addEventListener("timeupdate", () => {
+        azkarSeek.value = String(Math.floor(azkarAudio.currentTime));
+        updateAzkarTime();
+      });
+      azkarSeek.addEventListener("input", () => {
+        azkarAudio.currentTime = Number(azkarSeek.value);
+        updateAzkarTime();
+      });
+      azkarAudio.addEventListener("ended", () => {
+        azkarAudio.currentTime = 0;
+        azkarSeek.value = "0";
+        updateAzkarTime();
+      });
 
       const updateClock = () => {
         const now = new Date();
@@ -576,9 +646,6 @@
         }).format(now);
         document.getElementById("fullDate").textContent = new Intl.DateTimeFormat("ar-SY", {
           ...options, weekday: "long", day: "numeric", month: "long", year: "numeric"
-        }).format(now);
-        document.getElementById("datePill").textContent = new Intl.DateTimeFormat("ar-SY", {
-          ...options, weekday: "long"
         }).format(now);
       };
 

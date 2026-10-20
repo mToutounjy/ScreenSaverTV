@@ -2,7 +2,10 @@ package com.example.alepposcreensaver
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -18,6 +21,7 @@ import android.widget.Button
 import android.widget.CheckBox
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
@@ -45,7 +49,11 @@ class MainActivity : Activity() {
     private lateinit var prayerContent: LinearLayout
     private lateinit var weatherContent: LinearLayout
     private lateinit var weatherStatus: TextView
-    private lateinit var wisdomText: TextView
+    private lateinit var hadithText: TextView
+    private lateinit var hadithSourceText: TextView
+    private lateinit var azkarSeekBar: SeekBar
+    private lateinit var azkarTimeText: TextView
+    private lateinit var azkarPlayPauseButton: TextView
     private lateinit var clockSection: LinearLayout
     private lateinit var dateSection: View
     private lateinit var prayerSection: View
@@ -53,6 +61,36 @@ class MainActivity : Activity() {
     private lateinit var wisdomSection: View
     private var weatherRequest = 0
     private var renderedPrayerDate: LocalDate? = null
+    private var azkarPlayer: MediaPlayer? = null
+    private var azkarSeekInProgress = false
+    private var adhanPlaying = false
+    private var resumeAzkarAfterAdhan = false
+    private var adhanReceiverRegistered = false
+
+    private val updateAzkarProgress = object : Runnable {
+        override fun run() {
+            val player = azkarPlayer ?: return
+            if (player.isPlaying) {
+                if (!azkarSeekInProgress) azkarSeekBar.progress = player.currentPosition
+                updateAzkarTime(player.currentPosition, player.duration)
+                handler.postDelayed(this, 500)
+            }
+        }
+    }
+
+    private val adhanStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != AdhanPlaybackService.ACTION_PLAYBACK_STATE) return
+            adhanPlaying = intent.getBooleanExtra(AdhanPlaybackService.EXTRA_IS_PLAYING, false)
+            if (adhanPlaying) {
+                resumeAzkarAfterAdhan = resumeAzkarAfterAdhan || azkarPlayer?.isPlaying == true
+                pauseAzkar()
+            } else if (resumeAzkarAfterAdhan) {
+                resumeAzkarAfterAdhan = false
+                startAzkarPlayback()
+            }
+        }
+    }
 
     private val refreshWeather = object : Runnable {
         override fun run() {
@@ -67,7 +105,7 @@ class MainActivity : Activity() {
             val now = Instant.now()
             clockView.text = clockFormat.withZone(zone).format(now)
             dateView.text = dateFormat.withZone(zone).format(now)
-            wisdomText.text = DailyWisdom.forDate(LocalDate.now(zone))
+            updateDailyHadith()
             if (renderedPrayerDate != LocalDate.now(zone)) renderPrayerTimes() else updateNextPrayer(now)
             handler.postDelayed(this, 30_000)
         }
@@ -92,9 +130,33 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        val filter = IntentFilter(AdhanPlaybackService.ACTION_PLAYBACK_STATE)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(adhanStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(adhanStateReceiver, filter)
+        }
+        adhanReceiverRegistered = true
+    }
+
+    override fun onStop() {
+        if (adhanReceiverRegistered) {
+            unregisterReceiver(adhanStateReceiver)
+            adhanReceiverRegistered = false
+        }
+        resumeAzkarAfterAdhan = false
+        pauseAzkar()
+        super.onStop()
+    }
+
     override fun onDestroy() {
         handler.removeCallbacks(refreshClock)
         handler.removeCallbacks(refreshWeather)
+        handler.removeCallbacks(updateAzkarProgress)
+        releaseAzkarPlayer()
         executor.shutdownNow()
         super.onDestroy()
     }
@@ -155,9 +217,19 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
-        header.addView(text("◈  مواقيت حلب", 22, MINT, true), LinearLayout.LayoutParams(0, dp(46), 1f))
-        header.addView(button("الإعدادات") { showSettings() })
-        dashboard.addView(header, LinearLayout.LayoutParams(-1, dp(46)))
+        header.addView(createAzkarPlayer(), LinearLayout.LayoutParams(0, dp(58), 1f).apply {
+            setMargins(dp(10), 0, 0, 0)
+        })
+        header.addView(ImageButton(this).apply {
+            contentDescription = "الإعدادات"
+            setImageResource(android.R.drawable.ic_menu_preferences)
+            imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            background = rounded(0x9920313C.toInt(), 50)
+            isFocusable = true
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            setOnClickListener { showSettings() }
+        }, LinearLayout.LayoutParams(dp(46), dp(46)))
+        dashboard.addView(header, LinearLayout.LayoutParams(-1, dp(58)))
 
         val mainRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -176,8 +248,9 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(dp(22), dp(16), dp(22), dp(16))
+            background = cardBackground()
         }
-        clockView = text("", 92, Color.WHITE)
+        clockView = text("", 82, Color.WHITE)
         clockSection.addView(clockView)
         dateView = text("", 20, 0xFFB8C4C7.toInt())
         dateSection = LinearLayout(this).apply {
@@ -185,17 +258,37 @@ class MainActivity : Activity() {
             addView(dateView)
         }
         clockSection.addView(dateSection, LinearLayout.LayoutParams(-1, dp(38)))
-        nextPrayerView = text("", 19, GOLD, true).apply {
-            setPadding(dp(8), dp(12), dp(8), dp(4))
+        val nextPrayerCard = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(12), dp(9), dp(12), dp(9))
+            background = rounded(0x1AF1D08B, 18).apply {
+                setStroke(dp(1), 0x3BF1D08B)
+            }
         }
-        clockSection.addView(nextPrayerView)
-        mainRow.addView(clockSection, LinearLayout.LayoutParams(0, -1, 0.88f))
+        nextPrayerCard.addView(text("◷", 25, GOLD, true), LinearLayout.LayoutParams(dp(42), -1))
+        nextPrayerView = text("", 17, GOLD, true).apply {
+            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+            maxLines = 2
+        }
+        nextPrayerCard.addView(nextPrayerView, LinearLayout.LayoutParams(0, -2, 1f))
+        clockSection.addView(nextPrayerCard, LinearLayout.LayoutParams(-1, -2).apply {
+            setMargins(0, dp(22), 0, 0)
+        })
 
         prayerSection = cardSection()
         prayerSection.apply {
             val column = this as LinearLayout
             column.orientation = LinearLayout.VERTICAL
-            column.addView(text("مواقيت الصلاة", 22, MINT, true), LinearLayout.LayoutParams(-1, dp(42)))
+            val heading = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                addView(text("مواقيت الصلاة", 22, MINT, true), LinearLayout.LayoutParams(0, dp(42), 1f))
+                addView(text("اليوم في حلب", 14, 0xFFB8C4C7.toInt()))
+            }
+            column.addView(heading, LinearLayout.LayoutParams(-1, dp(42)))
             prayerContent = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
@@ -205,6 +298,7 @@ class MainActivity : Activity() {
         mainRow.addView(prayerSection, LinearLayout.LayoutParams(0, -1, 1.12f).apply {
             setMargins(dp(12), 0, 0, 0)
         })
+        mainRow.addView(clockSection, LinearLayout.LayoutParams(0, -1, 0.88f))
 
         weatherSection = cardSection()
         weatherSection.apply {
@@ -234,27 +328,29 @@ class MainActivity : Activity() {
             column.orientation = LinearLayout.HORIZONTAL
             column.gravity = Gravity.CENTER_VERTICAL
             column.addView(text("❝", 30, GOLD, true), LinearLayout.LayoutParams(dp(55), -1))
-            val wisdomCopy = LinearLayout(this@MainActivity).apply {
+            val hadithCopy = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_VERTICAL
-                addView(text("حكمة اليوم", 15, GOLD, true))
+                hadithSourceText = text("", 15, GOLD, true)
+                addView(hadithSourceText)
             }
-            wisdomText = text(DailyWisdom.forDate(LocalDate.now(zone)), 20, Color.WHITE)
-            wisdomText.gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
-            wisdomCopy.addView(wisdomText)
-            column.addView(wisdomCopy, LinearLayout.LayoutParams(0, -1, 1f))
+            hadithText = text("", 20, Color.WHITE)
+            hadithText.gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+            hadithCopy.addView(hadithText)
+            column.addView(hadithCopy, LinearLayout.LayoutParams(0, -1, 1f))
         }
         dashboard.addView(
             wisdomSection,
             LinearLayout.LayoutParams(-1, dp(76)).apply { setMargins(0, dp(8), 0, 0) }
         )
         dashboard.addView(
-            text("تصميم ملك البرمجة  و الاختراعات محمد توتونجي أبو عبدو", 14, 0xFFCFD8D8.toInt()),
-            LinearLayout.LayoutParams(-1, dp(27))
+                text("تصميم ملك البرمجة  و الاختراعات محمد توتونجي أبو عبدو", 14, 0xFFCFD8D8.toInt()),
+                LinearLayout.LayoutParams(-1, dp(30))
         )
 
         setContentView(root)
         applyVisibility()
+        updateDailyHadith()
         renderPrayerTimes()
         applyCardOpacity()
     }
@@ -383,7 +479,7 @@ class MainActivity : Activity() {
         addSettingSwitch(panel, "التاريخ", prefs.showDate) { prefs.showDate = it }
         addSettingSwitch(panel, "مواقيت الصلاة", prefs.showPrayers) { prefs.showPrayers = it }
         addSettingSwitch(panel, "الطقس", prefs.showWeather) { prefs.showWeather = it }
-        addSettingSwitch(panel, "حكمة اليوم", prefs.showWisdom) { prefs.showWisdom = it }
+        addSettingSwitch(panel, "حديث اليوم", prefs.showWisdom) { prefs.showWisdom = it }
         addSettingSwitch(panel, "تنبيه قبل الأذان", prefs.remindersEnabled) {
             prefs.remindersEnabled = it
             PrayerAlarmScheduler.schedule(this)
@@ -392,15 +488,16 @@ class MainActivity : Activity() {
             prefs.adhanEnabled = it
             PrayerAlarmScheduler.schedule(this)
         }
-        val opacityLabel = text("شفافية البطاقات: ${prefs.cardOpacity}%", 17, Color.WHITE)
+        val opacityLabel = text("شفافية البطاقات: ${100 - prefs.cardOpacity}%", 17, Color.WHITE)
         panel.addView(opacityLabel)
         panel.addView(SeekBar(this).apply {
             max = 75
-            progress = prefs.cardOpacity - 15
+            progress = (100 - prefs.cardOpacity) - 10
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    prefs.cardOpacity = progress + 15
-                    opacityLabel.text = "شفافية البطاقات: ${prefs.cardOpacity}%"
+                    val transparency = progress + 10
+                    prefs.cardOpacity = 100 - transparency
+                    opacityLabel.text = "شفافية البطاقات: $transparency%"
                     applyCardOpacity()
                 }
 
@@ -559,6 +656,146 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun createAzkarPlayer(): View {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+            background = rounded(0x9920313C.toInt(), 18)
+        }
+        card.addView(text("أذكار الصباح", 14, MINT, true), LinearLayout.LayoutParams(dp(100), -1))
+        azkarPlayPauseButton = text("▶", 20, Color.WHITE, true).apply {
+            contentDescription = "تشغيل الأذكار"
+            isFocusable = true
+            setOnClickListener { toggleAzkarPlayback() }
+        }
+        card.addView(azkarPlayPauseButton, LinearLayout.LayoutParams(dp(40), -1))
+        card.addView(text("■", 18, Color.WHITE, true).apply {
+            contentDescription = "إيقاف الأذكار"
+            isFocusable = true
+            setOnClickListener { stopAzkarPlayback() }
+        }, LinearLayout.LayoutParams(dp(38), -1))
+        azkarSeekBar = SeekBar(this).apply {
+            max = 1
+            progressTintList = android.content.res.ColorStateList.valueOf(MINT)
+            thumbTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (fromUser) {
+                        azkarTimeText.text =
+                            "${formatAudioTime(progress)} / ${formatAudioTime(azkarPlayer?.duration ?: 0)}"
+                    }
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {
+                    azkarSeekInProgress = true
+                }
+
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    azkarSeekInProgress = false
+                    azkarPlayer?.seekTo(seekBar?.progress ?: 0)
+                }
+            })
+        }
+        card.addView(azkarSeekBar, LinearLayout.LayoutParams(0, -1, 1f))
+        azkarTimeText = text("00:00 / 00:00", 12, 0xFFCFD8D8.toInt())
+        card.addView(azkarTimeText, LinearLayout.LayoutParams(dp(90), -1))
+        return card
+    }
+
+    private fun toggleAzkarPlayback() {
+        if (adhanPlaying) {
+            Toast.makeText(this, "الأذكار متوقفة حتى انتهاء الأذان.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (azkarPlayer?.isPlaying == true) {
+            pauseAzkar()
+        } else {
+            startAzkarPlayback()
+        }
+    }
+
+    private fun startAzkarPlayback() {
+        if (adhanPlaying) return
+        try {
+            val player = azkarPlayer ?: (MediaPlayer.create(this, R.raw.azkar)
+                ?: error("تعذر فتح ملف أذكار الصباح")).also { created ->
+                azkarPlayer = created
+                created.setOnCompletionListener {
+                    handler.removeCallbacks(updateAzkarProgress)
+                    azkarSeekBar.progress = 0
+                    updateAzkarTime(0, it.duration)
+                    updateAzkarPlayButton(false)
+                }
+                created.setOnErrorListener { _, what, extra ->
+                    android.util.Log.e("AleppoDashboard", "Azkar playback failed: $what/$extra")
+                    releaseAzkarPlayer()
+                    updateAzkarPlayButton(false)
+                    Toast.makeText(this, "تعذر تشغيل ملف الأذكار.", Toast.LENGTH_LONG).show()
+                    true
+                }
+            }
+            player.start()
+            azkarSeekBar.max = player.duration.coerceAtLeast(1)
+            updateAzkarPlayButton(true)
+            handler.removeCallbacks(updateAzkarProgress)
+            handler.post(updateAzkarProgress)
+        } catch (error: Exception) {
+            android.util.Log.e("AleppoDashboard", "Could not play azkar audio", error)
+            releaseAzkarPlayer()
+            updateAzkarPlayButton(false)
+            Toast.makeText(this, "تعذر تشغيل ملف الأذكار.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun pauseAzkar() {
+        val player = azkarPlayer
+        if (player?.isPlaying == true) player.pause()
+        handler.removeCallbacks(updateAzkarProgress)
+        updateAzkarPlayButton(false)
+        if (player != null) updateAzkarTime(player.currentPosition, player.duration)
+    }
+
+    private fun stopAzkarPlayback() {
+        resumeAzkarAfterAdhan = false
+        azkarPlayer?.let { player ->
+            if (player.isPlaying) player.pause()
+            player.seekTo(0)
+            azkarSeekBar.progress = 0
+            updateAzkarTime(0, player.duration)
+        }
+        handler.removeCallbacks(updateAzkarProgress)
+        updateAzkarPlayButton(false)
+    }
+
+    private fun releaseAzkarPlayer() {
+        azkarPlayer?.release()
+        azkarPlayer = null
+        if (::azkarSeekBar.isInitialized) {
+            azkarSeekBar.progress = 0
+            azkarSeekBar.max = 1
+            azkarTimeText.text = "00:00 / 00:00"
+        }
+    }
+
+    private fun updateAzkarPlayButton(isPlaying: Boolean) {
+        if (!::azkarPlayPauseButton.isInitialized) return
+        azkarPlayPauseButton.text = if (isPlaying) "Ⅱ" else "▶"
+        azkarPlayPauseButton.contentDescription = if (isPlaying) "إيقاف مؤقت للأذكار" else "تشغيل الأذكار"
+    }
+
+    private fun updateAzkarTime(position: Int, duration: Int) {
+        if (::azkarTimeText.isInitialized) {
+            azkarTimeText.text = "${formatAudioTime(position)} / ${formatAudioTime(duration)}"
+        }
+    }
+
+    private fun formatAudioTime(milliseconds: Int): String {
+        val totalSeconds = milliseconds.coerceAtLeast(0) / 1000
+        return "%02d:%02d".format(Locale.ROOT, totalSeconds / 60, totalSeconds % 60)
+    }
+
     private fun displayName(uri: Uri): String {
         contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
@@ -581,24 +818,30 @@ class MainActivity : Activity() {
         wisdomSection.visibility = if (prefs.showWisdom) View.VISIBLE else View.INVISIBLE
     }
 
+    private fun updateDailyHadith() {
+        val hadith = DailyHadith.forDate(LocalDate.now(zone))
+        hadithText.text = hadith.text
+        hadithSourceText.text = "حديث اليوم · صحيح البخاري ${hadith.bukhariNumber}"
+    }
+
     private fun applyCardOpacity() {
         if (!::prayerSection.isInitialized) return
-        listOf(prayerSection, weatherSection, wisdomSection).forEach { section ->
-            val color = Color.argb(prefs.cardOpacity * 255 / 100, 16, 32, 51)
-            section.background = rounded(color, 22).apply {
-                setStroke(dp(1), 0x667DD3C0)
-            }
+        listOf(clockSection, prayerSection, weatherSection, wisdomSection).forEach { section ->
+            section.background = cardBackground()
         }
     }
 
     private fun cardSection(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(20), dp(14), dp(20), dp(14))
-        background = rounded(Color.argb(prefs.cardOpacity * 255 / 100, 16, 32, 51), 22).apply {
-            setStroke(dp(1), 0x667DD3C0)
-        }
+        background = cardBackground()
         layoutDirection = View.LAYOUT_DIRECTION_RTL
     }
+
+    private fun cardBackground() =
+        rounded(Color.argb(prefs.cardOpacity * 255 / 100, 9, 23, 32), 30).apply {
+            setStroke(dp(1), 0x21FFFFFF)
+        }
 
     private fun text(value: String, size: Int, color: Int, bold: Boolean = false): TextView =
         TextView(this).apply {
