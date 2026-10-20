@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -72,10 +73,19 @@ object PrayerAlarmScheduler {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pendingIntent)
-        } else {
-            manager.setExact(AlarmManager.RTC_WAKEUP, atMillis, pendingIntent)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pendingIntent)
+            } else {
+                manager.setExact(AlarmManager.RTC_WAKEUP, atMillis, pendingIntent)
+            }
+        } catch (error: SecurityException) {
+            Log.w(
+                "AleppoDashboard",
+                "Exact prayer alarm denied; using an inexact alarm for $prayerName",
+                error
+            )
+            manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pendingIntent)
         }
     }
 }
