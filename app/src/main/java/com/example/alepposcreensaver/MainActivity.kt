@@ -20,6 +20,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import java.time.Instant
@@ -103,22 +104,23 @@ class MainActivity : Activity() {
         val root = FrameLayout(this).apply {
             setBackgroundColor(Color.rgb(7, 16, 27))
         }
-        val wallpaper = ImageView(this).apply {
+        val blurredWallpaper = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             contentDescription = null
         }
         prefs.wallpaper?.let { uri ->
             try {
-                wallpaper.setImageURI(uri)
+                blurredWallpaper.setImageURI(uri)
             } catch (error: RuntimeException) {
                 android.util.Log.w("AleppoDashboard", "Could not load saved wallpaper", error)
                 Toast.makeText(this, "تعذر فتح صورة الخلفية. اختر صورة أخرى من الإعدادات.", Toast.LENGTH_LONG).show()
             }
         }
+        blurredWallpaper.alpha = 0.4f
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
             prefs.wallpaperBlur > 0
         ) {
-            wallpaper.setRenderEffect(
+            blurredWallpaper.setRenderEffect(
                 android.graphics.RenderEffect.createBlurEffect(
                     prefs.wallpaperBlur.toFloat(),
                     prefs.wallpaperBlur.toFloat(),
@@ -126,95 +128,135 @@ class MainActivity : Activity() {
                 )
             )
         }
+        root.addView(blurredWallpaper, FrameLayout.LayoutParams(-1, -1))
+        val wallpaper = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = null
+        }
+        prefs.wallpaper?.let { wallpaper.setImageURI(it) }
         root.addView(wallpaper, FrameLayout.LayoutParams(-1, -1))
         root.addView(View(this).apply {
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xD9071020.toInt(), 0xA60A1422.toInt(), 0xE607101C.toInt())
+                intArrayOf(0x66071020, 0x330A1422, 0x7007101C)
             )
         }, FrameLayout.LayoutParams(-1, -1))
 
-        val content = LinearLayout(this).apply {
+        val dashboard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
+            gravity = Gravity.CENTER
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(50), dp(20), dp(50), dp(22))
+            setPadding(dp(30), dp(12), dp(30), dp(10))
         }
-        val scroll = ScrollView(this).apply {
-            isFillViewport = true
-            isFocusable = false
-            addView(content)
-        }
-        root.addView(scroll, FrameLayout.LayoutParams(-1, -1))
+        root.addView(dashboard, FrameLayout.LayoutParams(-1, -1))
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
-        header.addView(text("حلب", 23, MINT, true), LinearLayout.LayoutParams(0, dp(48), 1f))
+        header.addView(text("◈  مواقيت حلب", 22, MINT, true), LinearLayout.LayoutParams(0, dp(46), 1f))
         header.addView(button("الإعدادات") { showSettings() })
-        content.addView(header)
+        dashboard.addView(header, LinearLayout.LayoutParams(-1, dp(46)))
+
+        val mainRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+        }
+        dashboard.addView(
+            mainRow,
+            LinearLayout.LayoutParams(-1, 0, 1f).apply {
+                setMargins(0, dp(8), 0, dp(8))
+            }
+        )
 
         clockSection = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(22), dp(16), dp(22), dp(16))
         }
-        clockView = text("", 80, Color.WHITE, true)
+        clockView = text("", 92, Color.WHITE)
         clockSection.addView(clockView)
-        nextPrayerView = text("", 20, GOLD, true)
-        clockSection.addView(nextPrayerView)
-        dateView = text("", 21, 0xFFE3E9F0.toInt())
+        dateView = text("", 20, 0xFFB8C4C7.toInt())
         dateSection = LinearLayout(this).apply {
             gravity = Gravity.CENTER
             addView(dateView)
         }
-        content.addView(clockSection)
-        content.addView(dateSection, LinearLayout.LayoutParams(-1, dp(38)))
+        clockSection.addView(dateSection, LinearLayout.LayoutParams(-1, dp(38)))
+        nextPrayerView = text("", 19, GOLD, true).apply {
+            setPadding(dp(8), dp(12), dp(8), dp(4))
+        }
+        clockSection.addView(nextPrayerView)
+        mainRow.addView(clockSection, LinearLayout.LayoutParams(0, -1, 0.88f))
 
         prayerSection = cardSection()
         prayerSection.apply {
             val column = this as LinearLayout
             column.orientation = LinearLayout.VERTICAL
-            column.addView(text("مواقيت الصلاة", 22, MINT, true))
+            column.addView(text("مواقيت الصلاة", 22, MINT, true), LinearLayout.LayoutParams(-1, dp(42)))
             prayerContent = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
             }
-            column.addView(prayerContent)
+            column.addView(prayerContent, LinearLayout.LayoutParams(-1, 0, 1f))
         }
-        content.addView(prayerSection, sectionParams())
+        mainRow.addView(prayerSection, LinearLayout.LayoutParams(0, -1, 1.12f).apply {
+            setMargins(dp(12), 0, 0, 0)
+        })
 
         weatherSection = cardSection()
         weatherSection.apply {
             val column = this as LinearLayout
-            column.orientation = LinearLayout.VERTICAL
-            column.addView(text("الطقس للأيام السبعة", 22, MINT, true))
-            weatherStatus = text("يتم تحميل التوقعات…", 17, 0xFFE3E9F0.toInt())
-            column.addView(weatherStatus)
+            column.orientation = LinearLayout.HORIZONTAL
+            column.gravity = Gravity.CENTER_VERTICAL
+            val weatherHeading = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                addView(text("الطقس هذا الأسبوع", 17, MINT, true))
+                weatherStatus = text("°م", 14, 0xFFB8C4C7.toInt())
+                addView(weatherStatus)
+            }
+            column.addView(weatherHeading, LinearLayout.LayoutParams(dp(115), -1))
             weatherContent = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
             }
-            column.addView(weatherContent)
+            column.addView(weatherContent, LinearLayout.LayoutParams(0, -1, 1f))
         }
-        content.addView(weatherSection, sectionParams())
+        dashboard.addView(weatherSection, LinearLayout.LayoutParams(-1, dp(126)))
 
         wisdomSection = cardSection()
         wisdomSection.apply {
             val column = this as LinearLayout
-            column.orientation = LinearLayout.VERTICAL
-            column.addView(text("حكمة اليوم", 21, GOLD, true))
-            wisdomText = text(DailyWisdom.forDate(LocalDate.now(zone)), 23, Color.WHITE)
-            wisdomText.gravity = Gravity.CENTER
-            column.addView(wisdomText)
+            column.orientation = LinearLayout.HORIZONTAL
+            column.gravity = Gravity.CENTER_VERTICAL
+            column.addView(text("❝", 30, GOLD, true), LinearLayout.LayoutParams(dp(55), -1))
+            val wisdomCopy = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(text("حكمة اليوم", 15, GOLD, true))
+            }
+            wisdomText = text(DailyWisdom.forDate(LocalDate.now(zone)), 20, Color.WHITE)
+            wisdomText.gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+            wisdomCopy.addView(wisdomText)
+            column.addView(wisdomCopy, LinearLayout.LayoutParams(0, -1, 1f))
         }
-        content.addView(wisdomSection, sectionParams())
+        dashboard.addView(
+            wisdomSection,
+            LinearLayout.LayoutParams(-1, dp(76)).apply { setMargins(0, dp(8), 0, 0) }
+        )
+        dashboard.addView(
+            text("تصميم ملك البرمجة  و الاختراعات محمد توتونجي أبو عبدو", 14, 0xFFCFD8D8.toInt()),
+            LinearLayout.LayoutParams(-1, dp(27))
+        )
 
         setContentView(root)
         applyVisibility()
         renderPrayerTimes()
+        applyCardOpacity()
     }
 
     private fun renderPrayerTimes() {
@@ -223,26 +265,32 @@ class MainActivity : Activity() {
         val now = Instant.now()
         val today = LocalDate.now(zone)
         renderedPrayerDate = today
-        PrayerTimes.forDate(today, zone).forEach { prayer ->
+        val prayers = PrayerTimes.forDate(today, zone)
+        prayers.chunked(3).forEach { rowPrayers ->
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
+                gravity = Gravity.CENTER
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
-                setPadding(dp(6), dp(6), dp(6), dp(6))
             }
-            row.addView(text(prayer.name, 19, 0xFFE3E9F0.toInt()), LinearLayout.LayoutParams(0, -2, 1f))
-            row.addView(
-                text(clockFormat.withZone(zone).format(prayer.instant), 20, Color.WHITE, true),
-                LinearLayout.LayoutParams(dp(96), -2)
-            )
-            if (prayer.isPrayer) {
-                val next = PrayerTimes.forDate(LocalDate.now(zone), zone)
-                    .firstOrNull { it.isPrayer && it.instant.isAfter(now) }
-                if (next?.name == prayer.name) {
-                    row.background = rounded(0x553CBFA2, 12)
+            rowPrayers.forEach { prayer ->
+                val cell = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    layoutDirection = View.LAYOUT_DIRECTION_RTL
+                    setPadding(dp(4), dp(7), dp(4), dp(7))
                 }
+                cell.addView(text(prayer.name, 17, 0xFFB8C4C7.toInt()))
+                cell.addView(
+                    text(clockFormat.withZone(zone).format(prayer.instant), 22, Color.WHITE, true)
+                )
+                if (prayer.isPrayer && prayer.instant.isAfter(now) &&
+                    prayers.firstOrNull { it.isPrayer && it.instant.isAfter(now) }?.name == prayer.name
+                ) {
+                    cell.background = rounded(0x553CBFA2, 14)
+                }
+                row.addView(cell, LinearLayout.LayoutParams(0, -1, 1f))
             }
-            prayerContent.addView(row)
+            prayerContent.addView(row, LinearLayout.LayoutParams(-1, 0, 1f))
         }
         updateNextPrayer(now)
     }
@@ -256,21 +304,27 @@ class MainActivity : Activity() {
                 .first { it.isPrayer }
             val minutes = java.time.Duration.between(now, tomorrow.instant).toMinutes().coerceAtLeast(0)
             nextPrayerView.text = "الصلاة القادمة: الفجر غدًا • بعد ${minutes / 60} س ${minutes % 60} د"
-            for (index in 0 until prayerContent.childCount) {
-                prayerContent.getChildAt(index).background = null
+            for (rowIndex in 0 until prayerContent.childCount) {
+                val row = prayerContent.getChildAt(rowIndex) as? LinearLayout ?: continue
+                for (cellIndex in 0 until row.childCount) {
+                    row.getChildAt(cellIndex).background = null
+                }
             }
             return
         }
         val remaining = java.time.Duration.between(now, next.instant).toMinutes().coerceAtLeast(0)
         nextPrayerView.text = "الصلاة القادمة: ${next.name} • بعد ${remaining / 60} س ${remaining % 60} د"
         var highlight: View? = null
-        for (index in 0 until prayerContent.childCount) {
-            val child = prayerContent.getChildAt(index)
-            child.background = null
-            if (child is LinearLayout && child.childCount > 0 &&
-                (child.getChildAt(0) as? TextView)?.text == next.name
-            ) {
-                highlight = child
+        for (rowIndex in 0 until prayerContent.childCount) {
+            val row = prayerContent.getChildAt(rowIndex) as? LinearLayout ?: continue
+            for (cellIndex in 0 until row.childCount) {
+                val cell = row.getChildAt(cellIndex)
+                cell.background = null
+                if (cell is LinearLayout && cell.childCount > 0 &&
+                    (cell.getChildAt(0) as? TextView)?.text == next.name
+                ) {
+                    highlight = cell
+                }
             }
         }
         highlight?.background = rounded(0x553CBFA2, 12)
@@ -292,13 +346,12 @@ class MainActivity : Activity() {
                             gravity = Gravity.CENTER
                             setPadding(dp(7), dp(8), dp(7), dp(8))
                         }
-
-                        item.addView(text(dayFormat.format(day.date), 16, 0xFFE3E9F0.toInt()))
-                        item.addView(text(weatherSymbol(day.weatherCode), 25, Color.WHITE))
-                        item.addView(text("${day.highCelsius}° / ${day.lowCelsius}°", 16, Color.WHITE, true))
+                        item.addView(text(dayFormat.format(day.date), 15, 0xFFE3E9F0.toInt()))
+                        item.addView(text(weatherSymbol(day.weatherCode), 24, Color.WHITE))
+                        item.addView(text("${day.highCelsius}° / ${day.lowCelsius}°", 15, Color.WHITE, true))
                         weatherContent.addView(item, LinearLayout.LayoutParams(0, dp(88), 1f))
                     }
-                    weatherStatus.text = "درجات الحرارة العظمى / الصغرى • °م"
+                    weatherStatus.text = "العظمى / الصغرى • °م"
                 }
             } catch (error: Exception) {
                 android.util.Log.w("AleppoDashboard", "Weather forecast request failed", error)
@@ -339,6 +392,22 @@ class MainActivity : Activity() {
             prefs.adhanEnabled = it
             PrayerAlarmScheduler.schedule(this)
         }
+        val opacityLabel = text("شفافية البطاقات: ${prefs.cardOpacity}%", 17, Color.WHITE)
+        panel.addView(opacityLabel)
+        panel.addView(SeekBar(this).apply {
+            max = 75
+            progress = prefs.cardOpacity - 15
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    prefs.cardOpacity = progress + 15
+                    opacityLabel.text = "شفافية البطاقات: ${prefs.cardOpacity}%"
+                    applyCardOpacity()
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        })
         panel.addView(button("اختيار صورة الخلفية") { chooseFile(REQUEST_WALLPAPER, "image/*") })
         panel.addView(button("إزالة الصورة واستخدام الخلفية الافتراضية") {
             prefs.wallpaper = null
@@ -504,24 +573,32 @@ class MainActivity : Activity() {
         prefs.adhanUri?.let(::displayName) ?: "التسجيل الافتراضي"
 
     private fun applyVisibility() {
-        clockSection.visibility = if (prefs.showClock) View.VISIBLE else View.GONE
-        dateSection.visibility = if (prefs.showDate) View.VISIBLE else View.GONE
-        prayerSection.visibility = if (prefs.showPrayers) View.VISIBLE else View.GONE
-        weatherSection.visibility = if (prefs.showWeather) View.VISIBLE else View.GONE
-        wisdomSection.visibility = if (prefs.showWisdom) View.VISIBLE else View.GONE
+        clockSection.visibility = View.VISIBLE
+        clockView.visibility = if (prefs.showClock) View.VISIBLE else View.INVISIBLE
+        dateSection.visibility = if (prefs.showDate) View.VISIBLE else View.INVISIBLE
+        prayerSection.visibility = if (prefs.showPrayers) View.VISIBLE else View.INVISIBLE
+        weatherSection.visibility = if (prefs.showWeather) View.VISIBLE else View.INVISIBLE
+        wisdomSection.visibility = if (prefs.showWisdom) View.VISIBLE else View.INVISIBLE
+    }
+
+    private fun applyCardOpacity() {
+        if (!::prayerSection.isInitialized) return
+        listOf(prayerSection, weatherSection, wisdomSection).forEach { section ->
+            val color = Color.argb(prefs.cardOpacity * 255 / 100, 16, 32, 51)
+            section.background = rounded(color, 22).apply {
+                setStroke(dp(1), 0x667DD3C0)
+            }
+        }
     }
 
     private fun cardSection(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(20), dp(14), dp(20), dp(14))
-        background = rounded(0xBB102033.toInt(), 22).apply {
+        background = rounded(Color.argb(prefs.cardOpacity * 255 / 100, 16, 32, 51), 22).apply {
             setStroke(dp(1), 0x667DD3C0)
         }
         layoutDirection = View.LAYOUT_DIRECTION_RTL
     }
-
-    private fun sectionParams() =
-        LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, dp(10), 0, dp(5)) }
 
     private fun text(value: String, size: Int, color: Int, bold: Boolean = false): TextView =
         TextView(this).apply {

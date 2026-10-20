@@ -36,6 +36,9 @@ class AppPrefs(context: Context) {
     var wallpaperBlur: Int
         get() = prefs.getInt("wallpaper_blur", 8)
         set(value) = prefs.edit().putInt("wallpaper_blur", value).apply()
+    var cardOpacity: Int
+        get() = prefs.getInt("card_opacity", 58)
+        set(value) = prefs.edit().putInt("card_opacity", value.coerceIn(15, 90)).apply()
     var adhanUri: Uri?
         get() = prefs.getString("adhan_uri", null)?.let(Uri::parse)
         set(value) = prefs.edit().putString("adhan_uri", value?.toString()).apply()

@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07131d">
+  <title>معاينة لوحة مواقيت حلب</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f5f7f4;
+      --muted: #b8c4c7;
+      --mint: #a4e0ce;
+      --gold: #f1d08b;
+      --line: rgb(255 255 255 / 13%);
+      --panel: rgb(9 23 32 / 70%);
+      --safe: clamp(22px, 3.2vw, 58px);
+      font-family: "Geeza Pro", "Noto Naskh Arabic", "Tahoma", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { width: 100%; height: 100%; margin: 0; }
+
+    body {
+      overflow: hidden;
+      background: #07131d;
+      color: var(--ink);
+    }
+
+    button, input { font: inherit; }
+
+    .stage {
+      position: relative;
+      isolation: isolate;
+      width: 100%;
+      height: 100%;
+      min-height: 520px;
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse at 14% 25%, rgb(21 91 82 / 46%), transparent 42%),
+        radial-gradient(ellipse at 85% 80%, rgb(23 54 68 / 58%), transparent 48%),
+        linear-gradient(135deg, #07131d, #102331 55%, #0a171f);
+    }
+
+    .wallpaper-blur {
+      position: absolute;
+      z-index: -2;
+      inset: -30px;
+      background-position: center;
+      background-size: cover;
+      filter: blur(28px) brightness(.42);
+      transform: scale(1.08);
+      opacity: 0;
+      transition: opacity .3s ease;
+    }
+
+    .wallpaper-fit {
+      position: absolute;
+      z-index: -1;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+    }
+
+    .wallpaper-fit img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      filter: brightness(.56);
+    }
+
+    .shade {
+      position: absolute;
+      z-index: -1;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgb(4 13 19 / 58%), rgb(4 13 19 / 16%) 52%, rgb(4 13 19 / 53%)),
+        linear-gradient(0deg, rgb(4 13 19 / 68%), transparent 45%, rgb(4 13 19 / 30%));
+      pointer-events: none;
+    }
+
+    .dashboard {
+      position: relative;
+      display: grid;
+      grid-template-rows: 56px minmax(0, 1fr) minmax(126px, 22%) minmax(76px, 13%);
+      gap: clamp(12px, 1.7vh, 22px);
+      width: 100%;
+      height: 100%;
+      padding: var(--safe);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-width: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      color: var(--mint);
+      font-size: clamp(20px, 1.7vw, 30px);
+      font-weight: 700;
+      letter-spacing: .02em;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 37px;
+      height: 37px;
+      place-items: center;
+      border: 1px solid rgb(164 224 206 / 40%);
+      border-radius: 13px;
+      background: rgb(164 224 206 / 10%);
+      font-size: 22px;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .local-time, .settings-button {
+      border: 1px solid var(--line);
+      background: rgb(9 23 32 / 56%);
+      color: var(--ink);
+      backdrop-filter: blur(12px);
+    }
+
+    .local-time {
+      padding: 9px 16px;
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: clamp(13px, 1vw, 17px);
+    }
+
+    .settings-button {
+      display: grid;
+      width: 43px;
+      height: 43px;
+      place-items: center;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 21px;
+      transition: background .2s ease, transform .2s ease;
+    }
+
+    .settings-button:hover { background: rgb(164 224 206 / 17%); transform: rotate(18deg); }
+
+    .main-row {
+      display: grid;
+      grid-template-columns: minmax(0, .88fr) minmax(0, 1.12fr);
+      gap: clamp(18px, 3vw, 50px);
+      min-height: 0;
+    }
+
+    .hero, .prayers, .weather, .wisdom {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: 0 16px 42px rgb(0 0 0 / 14%);
+      backdrop-filter: blur(17px);
+    }
+
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      min-width: 0;
+      padding: clamp(22px, 3.4vw, 58px);
+      border-radius: 30px;
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--mint);
+      font-size: clamp(15px, 1.3vw, 22px);
+    }
+
+    .eyebrow::before {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--mint);
+      box-shadow: 0 0 17px rgb(164 224 206 / 85%);
+      content: "";
+    }
+
+    .clock {
+      margin: 7px 0 0;
+      font-family: "Avenir Next", "Tahoma", sans-serif;
+      font-size: clamp(76px, 10vw, 166px);
+      font-weight: 300;
+      line-height: 1.1;
+      letter-spacing: -.065em;
+      direction: ltr;
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 5px 30px rgb(0 0 0 / 24%);
+    }
+
+    .date {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: clamp(17px, 1.55vw, 26px);
+    }
+
+    .next-prayer {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: clamp(25px, 4.2vh, 52px);
+      padding: 14px 17px;
+      border: 1px solid rgb(241 208 139 / 23%);
+      border-radius: 18px;
+      background: rgb(241 208 139 / 8%);
+    }
+
+    .next-icon {
+      display: grid;
+      flex: 0 0 43px;
+      height: 43px;
+      place-items: center;
+      border-radius: 14px;
+      background: rgb(241 208 139 / 13%);
+      color: var(--gold);
+      font-size: 22px;
+    }
+
+    .next-label { color: var(--muted); font-size: clamp(13px, 1vw, 17px); }
+    .next-value { margin-top: 2px; color: var(--gold); font-size: clamp(18px, 1.55vw, 26px); font-weight: 700; }
+
+    .prayers {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      padding: clamp(20px, 2.2vw, 36px);
+      border-radius: 30px;
+    }
+
+    .section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: clamp(13px, 2vh, 22px);
+    }
+
+    .section-title {
+      margin: 0;
+      font-size: clamp(19px, 1.65vw, 28px);
+      font-weight: 700;
+    }
+
+    .section-subtitle { color: var(--muted); font-size: clamp(12px, .95vw, 16px); }
+
+    .prayer-grid {
+      display: grid;
+      flex: 1;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+      gap: clamp(9px, 1.1vw, 17px);
+      min-height: 0;
+    }
+
+    .prayer-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 19px;
+      background: rgb(255 255 255 / 4%);
+    }
+
+    .prayer-item.active {
+      border-color: rgb(164 224 206 / 49%);
+      background: linear-gradient(145deg, rgb(78 155 132 / 27%), rgb(164 224 206 / 8%));
+      box-shadow: inset 0 0 24px rgb(164 224 206 / 5%);
+    }
+
+    .prayer-name { color: var(--muted); font-size: clamp(14px, 1.15vw, 19px); }
+    .prayer-time {
+      font-family: "Avenir Next", "Tahoma", sans-serif;
+      font-size: clamp(23px, 2.25vw, 38px);
+      font-weight: 600;
+      direction: ltr;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .lower-panel {
+      display: grid;
+      grid-template-columns: 1fr;
+      min-height: 0;
+    }
+
+    .weather {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      padding: 16px clamp(18px, 2.2vw, 36px);
+      border-radius: 25px;
+    }
+
+    .weather .section-heading { margin-bottom: 8px; }
+    .forecast {
+      display: grid;
+      flex: 1;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      min-height: 0;
+    }
+
+    .forecast-day {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      justify-items: center;
+      gap: clamp(3px, .5vw, 10px);
+      min-width: 0;
+      padding: 0 8px;
+      border-inline-start: 1px solid var(--line);
+    }
+
+    .forecast-day:last-child { border-inline-start: 0; }
+    .forecast-name { color: var(--muted); font-size: clamp(11px, .95vw, 16px); text-align: center; }
+    .forecast-icon { font-size: clamp(20px, 1.8vw, 30px); }
+    .forecast-temp { white-space: nowrap; font-size: clamp(12px, 1.05vw, 18px); direction: ltr; }
+    .forecast-temp span { color: var(--muted); }
+
+    .wisdom {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      min-width: 0;
+      padding: 14px clamp(20px, 2.4vw, 40px);
+      border-radius: 24px;
+    }
+
+    .wisdom-mark {
+      display: grid;
+      flex: 0 0 42px;
+      height: 42px;
+      place-items: center;
+      border-radius: 14px;
+      background: rgb(241 208 139 / 11%);
+      color: var(--gold);
+      font-size: 26px;
+    }
+
+    .wisdom-copy { min-width: 0; }
+    .wisdom-label { color: var(--gold); font-size: clamp(13px, 1vw, 17px); }
+    .wisdom-text {
+      overflow: hidden;
+      margin-top: 3px;
+      font-size: clamp(17px, 1.45vw, 24px);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .settings {
+      position: absolute;
+      z-index: 3;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgb(0 0 0 / 58%);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s ease;
+    }
+
+    .settings.open { opacity: 1; pointer-events: auto; }
+
+    .settings-card {
+      width: min(520px, 95vw);
+      max-height: min(78vh, 690px);
+      overflow: auto;
+      padding: 26px;
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      background: #10212b;
+      box-shadow: 0 24px 70px rgb(0 0 0 / 48%);
+    }
+
+    .settings-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
+    .settings-head h2 { margin: 0; font-size: 24px; }
+    .close-button {
+      width: 38px;
+      height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 22px;
+    }
+
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 15px;
+      min-height: 55px;
+      border-bottom: 1px solid var(--line);
+      color: var(--ink);
+      font-size: 17px;
+    }
+
+    .settings-row input[type="checkbox"] { width: 19px; height: 19px; accent-color: #8fd5bd; }
+    .settings-row input[type="file"] { max-width: 245px; color: var(--muted); font-size: 13px; }
+    .settings-note { margin: 17px 0 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; clip-path: inset(50%); }
+
+    @media (max-height: 700px) {
+      .dashboard { grid-template-rows: 42px minmax(0, 1fr) minmax(100px, 21%) minmax(59px, 12%); gap: 9px; }
+      .clock { font-size: clamp(60px, 8.7vw, 112px); }
+      .hero { padding: 18px 30px; }
+      .prayers { padding: 16px 22px; }
+      .section-heading { margin-bottom: 9px; }
+    }
+
+    @media (max-width: 900px) {
+      .dashboard { padding: 20px; grid-template-rows: 46px minmax(0, 1fr) 138px 78px; }
+      .main-row { grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr); gap: 12px; }
+      .hero, .prayers { border-radius: 22px; }
+      .hero { padding: 18px; }
+      .prayers { padding: 16px; }
+      .forecast-day { grid-template-columns: 1fr; gap: 2px; }
+      .forecast-icon { font-size: 21px; }
+      .wisdom { gap: 10px; padding: 10px 16px; }
+      .wisdom-mark { flex-basis: 34px; height: 34px; }
+    }
+
+    @media (max-width: 620px) {
+      body { overflow: auto; }
+      .stage { min-height: 100vh; height: auto; overflow: visible; }
+      .wallpaper-fit { position: fixed; }
+      .wallpaper-blur { position: fixed; }
+      .shade { position: fixed; }
+      .dashboard { display: flex; min-height: 100vh; flex-direction: column; padding: 18px; }
+      .topbar { flex: 0 0 44px; }
+      .main-row { display: flex; flex-direction: column; }
+      .hero { min-height: 260px; align-items: center; text-align: center; }
+      .clock { font-size: clamp(84px, 25vw, 130px); }
+      .next-prayer { margin-top: 15px; }
+      .prayers { min-height: 290px; }
+      .prayer-grid { min-height: 215px; }
+      .weather { min-height: 160px; }
+      .forecast-day { grid-template-columns: 1fr; }
+      .forecast-name { font-size: 10px; }
+      .forecast-temp { font-size: 11px; }
+      .wisdom { min-height: 78px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage" id="stage">
+    <div class="wallpaper-blur" id="wallpaperBlur" aria-hidden="true"></div>
+    <div class="wallpaper-fit" aria-hidden="true">
+      <img id="wallpaperImage" alt="" hidden>
+    </div>
+    <div class="shade" aria-hidden="true"></div>
+
+    <div class="dashboard">
+      <header class="topbar">
+        <div class="brand"><span class="brand-mark" aria-hidden="true">◈</span><span>مواقيت حلب</span></div>
+        <div class="top-actions">
+          <span class="local-time" id="datePill"></span>
+          <button class="settings-button" id="openSettings" type="button" aria-label="فتح إعدادات المعاينة" title="إعدادات المعاينة">⚙</button>
+        </div>
+      </header>
+
+      <section class="main-row" aria-label="الساعة ومواقيت الصلاة">
+        <article class="hero" id="clockRegion">
+          <div class="eyebrow">حلب، سوريا</div>
+          <time class="clock" id="clock">--:--</time>
+          <div class="date" id="fullDate"></div>
+          <div class="next-prayer">
+            <span class="next-icon" aria-hidden="true">◷</span>
+            <span>
+              <span class="next-label">الصلاة القادمة</span>
+              <span class="next-value" id="nextPrayer">المغرب · بعد 18 دقيقة</span>
+            </span>
+          </div>
+        </article>
+
+        <article class="prayers" id="prayerRegion">
+          <div class="section-heading">
+            <h1 class="section-title">مواقيت الصلاة</h1>
+            <span class="section-subtitle">اليوم في حلب</span>
+          </div>
+          <div class="prayer-grid">
+            <div class="prayer-item"><span class="prayer-name">الفجر</span><time class="prayer-time">04:32</time></div>
+            <div class="prayer-item"><span class="prayer-name">الشروق</span><time class="prayer-time">05:54</time></div>
+            <div class="prayer-item"><span class="prayer-name">الظهر</span><time class="prayer-time">12:18</time></div>
+            <div class="prayer-item"><span class="prayer-name">العصر</span><time class="prayer-time">15:42</time></div>
+            <div class="prayer-item active"><span class="prayer-name">المغرب</span><time class="prayer-time">18:26</time></div>
+            <div class="prayer-item"><span class="prayer-name">العشاء</span><time class="prayer-time">19:48</time></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="lower-panel" aria-label="الطقس">
+        <article class="weather" id="weatherRegion">
+          <div class="section-heading">
+            <h2 class="section-title">الطقس هذا الأسبوع</h2>
+            <span class="section-subtitle">العظمى / الصغرى · °م</span>
+          </div>
+          <div class="forecast">
+            <div class="forecast-day"><span class="forecast-name">الثلاثاء</span><span class="forecast-icon">☀</span><span class="forecast-temp">24° <span>17°</span></span></div>
+            <div class="forecast-day"><span class="forecast-name">الأربعاء</span><span class="forecast-icon">⛅</span><span class="forecast-temp">22° <span>15°</span></span></div>
+            <div class="forecast-day"><span class="forecast-name">الخميس</span><span class="forecast-icon">☁</span><span class="forecast-temp">21° <span>14°</span></span></div>
+            <div class="forecast-day"><span class="forecast-name">الجمعة</span><span class="forecast-icon">☂</span><span class="forecast-temp">19° <span>13°</span></span></div>
+            <div class="forecast-day"><span class="forecast-name">السبت</span><span class="forecast-icon">☀</span><span class="forecast-temp">25° <span>16°</span></span></div>
+            <div class="forecast-day"><span class="forecast-name">الأحد</span><span class="forecast-icon">☀</span><span class="forecast-temp">26° <span>17°</span></span></div>
+            <div class="forecast-day"><span class="forecast-name">الاثنين</span><span class="forecast-icon">⛅</span><span class="forecast-temp">23° <span>16°</span></span></div>
+          </div>
+        </article>
+      </section>
+
+      <footer class="wisdom" id="wisdomRegion">
+        <span class="wisdom-mark" aria-hidden="true">“</span>
+        <div class="wisdom-copy">
+          <div class="wisdom-label">حكمة اليوم</div>
+          <div class="wisdom-text" id="wisdomText">الخطوة الصغيرة كل يوم تصنع مسافة كبيرة.</div>
+        </div>
+      </footer>
+    </div>
+
+    <section class="settings" id="settings" aria-labelledby="settingsTitle" aria-hidden="true">
+      <div class="settings-card" role="dialog" aria-modal="true">
+        <div class="settings-head">
+          <h2 id="settingsTitle">إعدادات المعاينة</h2>
+          <button class="close-button" id="closeSettings" type="button" aria-label="إغلاق">×</button>
+        </div>
+        <label class="settings-row">إظهار الساعة والتاريخ<input type="checkbox" data-region="clockRegion" checked></label>
+        <label class="settings-row">إظهار مواقيت الصلاة<input type="checkbox" data-region="prayerRegion" checked></label>
+        <label class="settings-row">إظهار الطقس<input type="checkbox" data-region="weatherRegion" checked></label>
+        <label class="settings-row">إظهار حكمة اليوم<input type="checkbox" data-region="wisdomRegion" checked></label>
+        <label class="settings-row" for="wallpaperPicker">
+          <span>اختيار صورة خلفية</span>
+          <input id="wallpaperPicker" type="file" accept="image/*">
+        </label>
+        <p class="settings-note">إخفاء أي عنصر يترك منطقته ثابتة وفارغة، فلا يتغير توزيع بقية المحتوى. الصورة تُعرض كاملة؛ وتُستخدم نسخة مموهة خلفها لملء المساحة الزائدة. المعاينة تعرض أوقاتًا وطقسًا تجريبيين.</p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const settings = document.getElementById("settings");
+      const openButton = document.getElementById("openSettings");
+      const closeButton = document.getElementById("closeSettings");
+      const image = document.getElementById("wallpaperImage");
+      const blurLayer = document.getElementById("wallpaperBlur");
+      let currentImageUrl = null;
+
+      const updateClock = () => {
+        const now = new Date();
+        const options = { timeZone: "Asia/Damascus" };
+        document.getElementById("clock").textContent = new Intl.DateTimeFormat("en-GB", {
+          ...options, hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+        }).format(now);
+        document.getElementById("fullDate").textContent = new Intl.DateTimeFormat("ar-SY", {
+          ...options, weekday: "long", day: "numeric", month: "long", year: "numeric"
+        }).format(now);
+        document.getElementById("datePill").textContent = new Intl.DateTimeFormat("ar-SY", {
+          ...options, weekday: "long"
+        }).format(now);
+      };
+
+      const setSettingsOpen = (open) => {
+        settings.classList.toggle("open", open);
+        settings.setAttribute("aria-hidden", String(!open));
+        if (open) closeButton.focus();
+        else openButton.focus();
+      };
+
+      openButton.addEventListener("click", () => setSettingsOpen(true));
+      closeButton.addEventListener("click", () => setSettingsOpen(false));
+      settings.addEventListener("click", (event) => {
+        if (event.target === settings) setSettingsOpen(false);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && settings.classList.contains("open")) setSettingsOpen(false);
+      });
+
+      document.querySelectorAll("[data-region]").forEach((toggle) => {
+        toggle.addEventListener("change", () => {
+          const region = document.getElementById(toggle.dataset.region);
+          region.style.visibility = toggle.checked ? "visible" : "hidden";
+          region.setAttribute("aria-hidden", String(!toggle.checked));
+        });
+      });
+
+      document.getElementById("wallpaperPicker").addEventListener("change", (event) => {
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+        if (currentImageUrl) URL.revokeObjectURL(currentImageUrl);
+        currentImageUrl = URL.createObjectURL(file);
+        image.src = currentImageUrl;
+        image.hidden = false;
+        blurLayer.style.backgroundImage = `url("${currentImageUrl}")`;
+        blurLayer.style.opacity = "1";
+      });
+
+      updateClock();
+      window.setInterval(updateClock, 15_000);
+    })();
+  </script>
+</body>
+</html>
