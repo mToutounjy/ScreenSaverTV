@@ -33,7 +33,7 @@ class MainActivity : Activity() {
     private val prefs by lazy { AppPrefs(this) }
     private val handler = Handler(Looper.getMainLooper())
     private val executor = Executors.newSingleThreadExecutor()
-    private val zone = ZoneId.of("Asia/Aleppo")
+    private val zone = ZoneId.of("Asia/Damascus")
     private val clockFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT)
     private val dateFormat = DateTimeFormatter.ofPattern("EEEE، d MMMM yyyy", Locale("ar", "SY"))
     private val dayFormat = DateTimeFormatter.ofPattern("EEE d/M", Locale("ar", "SY"))

@@ -10,7 +10,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 object PrayerAlarmScheduler {
-    private val zone = ZoneId.of("Asia/Aleppo")
+    private val zone = ZoneId.of("Asia/Damascus")
 
     fun schedule(context: Context) {
         val prefs = AppPrefs(context)

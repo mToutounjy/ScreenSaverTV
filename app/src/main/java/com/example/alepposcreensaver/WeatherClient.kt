@@ -15,7 +15,7 @@ data class ForecastDay(
 
 object WeatherClient {
     fun fetchWeek(): List<ForecastDay> {
-        val timezone = URLEncoder.encode("Asia/Aleppo", Charsets.UTF_8.name())
+        val timezone = URLEncoder.encode("Asia/Damascus", Charsets.UTF_8.name())
         val url = URL(
             "https://api.open-meteo.com/v1/forecast" +
                 "?latitude=36.2021&longitude=37.1343" +
