@@ -1,0 +1,11 @@
+Bundled default adhan audio
+
+Title: The Adhan - Muslim Call to Prayer - Aaqib Azeez
+Author: Atcovi
+Source: https://commons.wikimedia.org/wiki/File:The_Adhan_-_Muslim_Call_to_Prayer_-_Aaqib_Azeez.mp3
+License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+License URL: https://creativecommons.org/licenses/by-sa/4.0/
+
+The recording is included unmodified. The license permits sharing and adaptation
+provided appropriate credit is given, a link to the license is included, and
+adaptations are distributed under the same license.
